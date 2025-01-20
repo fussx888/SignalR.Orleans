@@ -1,0 +1,122 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Binance.Net;
+using Binance.Net.Objects;
+using CryptoExchange.Net.Authentication;
+using Binance.Net.Enums;
+
+public class TradingBot
+{
+    private static BinanceClient _binanceClient;
+    private static string _apiKey = "YOUR_API_KEY";
+    private static string _apiSecret = "YOUR_API_SECRET";
+
+    // Define the symbol (Coin-OmniUSDT) and the timeframe (5 minutes)
+    private const string Symbol = "OMNIUSDT";
+    private const int Timeframe = 5; // Timeframe in minutes
+
+    // Main trading logic loop
+    public static async Task Main(string[] args)
+    {
+        var credentials = new ApiCredentials(_apiKey, _apiSecret);
+        _binanceClient = new BinanceClient(new BinanceClientOptions { ApiCredentials = credentials });
+
+        // Continuously check the market every 5 minutes
+        while (true)
+        {
+            await ExecuteTradeLogic();
+            // Sleep for the 5-minute interval
+            Thread.Sleep(TimeSpan.FromMinutes(Timeframe));
+        }
+    }
+
+    // Fetch the latest market data and make trading decisions
+    private static async Task ExecuteTradeLogic()
+    {
+        try
+        {
+            var klines = await _binanceClient.GetKlinesAsync(Symbol, Binance.Net.Enums.KlineInterval.FiveMinutes, limit: 2);
+            var lastKline = klines.Data[klines.Data.Count - 1];
+            var previousKline = klines.Data[klines.Data.Count - 2];
+
+            // Basic strategy: Buy if the last closing price is greater than the previous one (Uptrend)
+            if (lastKline.Close > previousKline.Close)
+            {
+                Console.WriteLine("Uptrend detected. Buying...");
+                await ExecuteBuyOrder();
+            }
+            // Basic strategy: Sell if the last closing price is lower than the previous one (Downtrend)
+            else if (lastKline.Close < previousKline.Close)
+            {
+                Console.WriteLine("Downtrend detected. Selling...");
+                await ExecuteSellOrder();
+            }
+            else
+            {
+                Console.WriteLine("No significant price movement detected.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in executing trade logic: {ex.Message}");
+        }
+    }
+
+    // Function to place a buy order
+    private static async Task ExecuteBuyOrder()
+    {
+        try
+        {
+            var balance = await _binanceClient.GetAccountInfoAsync();
+            var usdtBalance = balance.Data.Balances.Find(b => b.Asset == "USDT");
+            var buyAmount = usdtBalance.Free * 0.1; // Buy with 10% of available USDT balance
+
+            if (buyAmount > 0)
+            {
+                var result = await _binanceClient.PlaceOrderAsync(Symbol, OrderSide.Buy, OrderType.Market, quantity: buyAmount);
+                if (result.Success)
+                {
+                    Console.WriteLine($"Buy order placed successfully: {result.Data}");
+                }
+                else
+                {
+                    Console.WriteLine($"Error placing buy order: {result.Error}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error placing buy order: {ex.Message}");
+        }
+    }
+
+    // Function to place a sell order
+    private static async Task ExecuteSellOrder()
+    {
+        try
+        {
+            var balance = await _binanceClient.GetAccountInfoAsync();
+            var omniBalance = balance.Data.Balances.Find(b => b.Asset == "OMNI");
+            var sellAmount = omniBalance.Free * 0.1; // Sell 10% of available OMNI balance
+
+            if (sellAmount > 0)
+            {
+                var result = await _binanceClient.PlaceOrderAsync(Symbol, OrderSide.Sell, OrderType.Market, quantity: sellAmount);
+                if (result.Success)
+                {
+                    Console.WriteLine($"Sell order placed successfully: {result.Data}");
+                }
+                else
+                {
+                    Console.WriteLine($"Error placing sell order: {result.Error}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error placing sell order: {ex.Message}");
+        }
+    }
+}
